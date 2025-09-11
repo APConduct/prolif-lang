@@ -209,10 +209,28 @@ impl MacroExpander {
             }
 
             ASTNode::Block(nodes) => {
-                let substituted_nodes: Vec<_> = nodes
-                    .iter()
-                    .map(|node| self.substitute_bindings(node))
-                    .collect();
+                let mut substituted_nodes = Vec::new();
+
+                for node in nodes {
+                    match node {
+                        ASTNode::Identifier(name) => {
+                            if let Some(binding) = self.context.bindings.get(name) {
+                                // If the binding is a block, flatten its contents
+                                if let ASTNode::Block(inner_nodes) = binding {
+                                    substituted_nodes.extend(inner_nodes.clone());
+                                } else {
+                                    substituted_nodes.push(binding.clone());
+                                }
+                            } else {
+                                substituted_nodes.push(node.clone());
+                            }
+                        }
+                        _ => {
+                            substituted_nodes.push(self.substitute_bindings(node));
+                        }
+                    }
+                }
+
                 ASTNode::Block(substituted_nodes)
             }
 
