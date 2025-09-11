@@ -216,6 +216,24 @@ impl MacroExpander {
                 ASTNode::Block(substituted_nodes)
             }
 
+            ASTNode::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let substituted_condition = Box::new(self.substitute_bindings(condition));
+                let substituted_then = Box::new(self.substitute_bindings(then_branch));
+                let substituted_else = else_branch
+                    .as_ref()
+                    .map(|e| Box::new(self.substitute_bindings(e)));
+
+                ASTNode::If {
+                    condition: substituted_condition,
+                    then_branch: substituted_then,
+                    else_branch: substituted_else,
+                }
+            }
+
             // TODO: Handle other node types
             _ => ast.clone(),
         }
