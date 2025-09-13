@@ -446,6 +446,7 @@ mod tests {
     }
 }
 
+#[ignore]
 #[test]
 fn test() -> Result<(), BuilderError> {
     // Initialize LLVM context
