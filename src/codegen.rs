@@ -327,11 +327,9 @@ impl<'ctx> CodeGenerator<'ctx> {
 
         // Generate else branch
         self.builder.position_at_end(else_block);
-        let else_val = if let Some(else_node) = else_branch {
-            self.generate_statement(else_node)?
-        } else {
-            None
-        };
+        if let Some(else_node) = else_branch {
+            self.generate_statement(else_node)?;
+        }
         self.builder
             .build_unconditional_branch(merge_block)
             .map_err(|e| CodegenError::LLVMError(format!("Failed to build branch: {}", e)))?;
