@@ -1,6 +1,7 @@
 use crate::{expansion::MacroExpander, lexer::Lexer, parser::Parser};
 
 pub mod ast;
+pub mod codegen;
 pub mod context;
 pub mod expansion;
 pub mod lexer;
