@@ -1,6 +1,7 @@
-use std::{collections::HashMap, fmt, thread::Builder};
+use std::{collections::HashMap, fmt};
 
 use either::Either;
+#[allow(unused_imports)]
 use inkwell::{
     AddressSpace, OptimizationLevel,
     builder::BuilderError,
@@ -367,6 +368,82 @@ pub struct CodeGenerator<'ctx> {
     // Symbol tables
     variables: HashMap<String, BasicValueEnum<'ctx>>,
     functions: HashMap<String, FunctionValue<'ctx>>,
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_codegen() {
+        // Example AST:
+        // primitive print = builtin_print
+        // print("Hello, World!")
+        use super::CodeGenerator;
+        use crate::ast::{ASTNode, Literal};
+        use inkwell::context::Context;
+
+        let context = Context::create();
+        let mut codegen = CodeGenerator::new(&context, "test_module").unwrap();
+
+        let ast = vec![
+            ASTNode::PrimitiveDeclaration {
+                name: "print".to_string(),
+                builtin: "builtin_print".to_string(),
+            },
+            ASTNode::Call {
+                name: "print".to_string(),
+                args: vec![ASTNode::Literal(Literal::String(
+                    "Hello, World!".to_string(),
+                ))],
+            },
+        ];
+
+        codegen.generate_from_ast(ast).unwrap();
+        codegen.print_ir();
+
+        let result = codegen.execute_main().unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_codegen_if() {
+        // Example AST:
+        // primitive print = builtin_print
+        // if (1) {
+        //     print("Condition is true")
+        // } else {
+        //     print("Condition is false")
+        // }
+        use super::CodeGenerator;
+        use crate::ast::{ASTNode, Literal};
+        use inkwell::context::Context;
+        let context = Context::create();
+        let mut codegen = CodeGenerator::new(&context, "test_if_module").unwrap();
+        let ast = vec![
+            ASTNode::PrimitiveDeclaration {
+                name: "print".to_string(),
+                builtin: "builtin_print".to_string(),
+            },
+            ASTNode::If {
+                condition: Box::new(ASTNode::Literal(Literal::Integer(1))),
+                then_branch: Box::new(ASTNode::Call {
+                    name: "print".to_string(),
+                    args: vec![ASTNode::Literal(Literal::String(
+                        "Condition is true".to_string(),
+                    ))],
+                }),
+                else_branch: Some(Box::new(ASTNode::Call {
+                    name: "print".to_string(),
+                    args: vec![ASTNode::Literal(Literal::String(
+                        "Condition is false".to_string(),
+                    ))],
+                })),
+            },
+        ];
+        codegen.generate_from_ast(ast).unwrap();
+        codegen.print_ir();
+        let result = codegen.execute_main().unwrap();
+        assert_eq!(result, 0);
+    }
 }
 
 #[test]

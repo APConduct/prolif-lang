@@ -7,8 +7,6 @@ mod tests {
         parser::Parser,
     };
 
-    use super::*;
-
     #[test]
     fn test_lexer_basic_tokens() {
         let mut lexer = Lexer::new("= -> | $ ... ( ) { }".to_string());
@@ -194,7 +192,7 @@ mod tests {
         match result {
             ASTNode::If {
                 condition,
-                then_branch,
+                then_branch: _,
                 else_branch,
             } => {
                 assert_eq!(*condition, ASTNode::Literal(Literal::Boolean(true)));

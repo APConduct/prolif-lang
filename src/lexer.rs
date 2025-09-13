@@ -52,7 +52,7 @@ pub struct Lexer {
 
 impl Lexer {
     pub fn new(input: String) -> Self {
-        let mut lexer = Lexer {
+        let lexer = Lexer {
             current_char: input.chars().next(),
             input,
             position: 0,
