@@ -353,9 +353,100 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.execution_engine.get_function("main").map_err(|e| {
                     CodegenError::LLVMError(format!("Failed to get main function: {}", e))
                 })?;
-
+            // end here.
             Ok(main_fn.call())
         }
+    }
+
+    pub fn write_object_file(&self, filename: &str) -> Result<(), CodegenError> {
+        use inkwell::targets::{CodeModel, RelocMode, Target, TargetMachine};
+        use std::path::Path;
+
+        // Initialize target
+        Target::initialize_native(&InitializationConfig::default())
+            .map_err(|e| CodegenError::LLVMError(format!("Failed to initialize target: {}", e)))?;
+
+        let target_triple = TargetMachine::get_default_triple();
+        let target = Target::from_triple(&target_triple).map_err(|e| {
+            CodegenError::LLVMError(format!("Failed to create target from triple: {}", e))
+        })?;
+
+        let target_machine = target
+            .create_target_machine(
+                &target_triple,
+                "generic", // CPU
+                "",        // Features
+                OptimizationLevel::Default,
+                RelocMode::Default,
+                CodeModel::Default,
+            )
+            .ok_or_else(|| {
+                CodegenError::LLVMError("Failed to create target machine".to_string())
+            })?;
+
+        // Write object file
+        target_machine
+            .write_to_file(
+                &self.module,
+                inkwell::targets::FileType::Object,
+                Path::new(filename),
+            )
+            .map_err(|e| CodegenError::LLVMError(format!("Failed to write object file: {}", e)))?;
+
+        Ok(())
+    }
+
+    pub fn write_bitcode(&self, filename: &str) -> Result<(), CodegenError> {
+        use std::path::Path;
+
+        if self.module.write_bitcode_to_path(Path::new(filename)) {
+            Ok(())
+        } else {
+            Err(CodegenError::LLVMError(
+                "Failed to write bitcode".to_string(),
+            ))
+        }
+    }
+
+    pub fn write_llvm_ir(&self, filename: &str) -> Result<(), CodegenError> {
+        use std::fs;
+
+        let ir = self.module.print_to_string().to_string();
+        fs::write(filename, ir)
+            .map_err(|e| CodegenError::LLVMError(format!("Failed to write IR file: {}", e)))?;
+
+        Ok(())
+    }
+
+    pub fn compile_to_executable(&self, output_filename: &str) -> Result<(), CodegenError> {
+        use std::fs;
+        use std::process::Command;
+
+        let object_filename = format!("{}.o", output_filename);
+
+        // Step 1: Generate object file
+        self.write_object_file(&object_filename)?;
+
+        // Step 2: Link with system linker (requires libc for printf)
+        let output = Command::new("cc") // Use system C compiler as linker
+            .arg("-o")
+            .arg(output_filename)
+            .arg(&object_filename)
+            .output()
+            .map_err(|e| CodegenError::LLVMError(format!("Failed to run linker: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(CodegenError::LLVMError(format!(
+                "Linker failed: {}",
+                stderr
+            )));
+        }
+
+        // Clean up object file
+        let _ = fs::remove_file(&object_filename);
+
+        Ok(())
     }
 }
 
@@ -416,6 +507,11 @@ mod tests {
         use super::CodeGenerator;
         use crate::ast::{ASTNode, Literal};
         use inkwell::context::Context;
+
+        // let start = chrono::Local::now();
+
+        // for _ in 0..1000 {
+        // println!("START: {}", chrono::Local::now());
         let context = Context::create();
         let mut codegen = CodeGenerator::new(&context, "test_if_module").unwrap();
         let ast = vec![
@@ -440,9 +536,59 @@ mod tests {
             },
         ];
         codegen.generate_from_ast(ast).unwrap();
-        codegen.print_ir();
+
+        // println!("END: {}", chrono::Local::now());
+        // codegen.print_ir();
         let result = codegen.execute_main().unwrap();
         assert_eq!(result, 0);
+        // }
+        // let end = chrono::Local::now();
+
+        // println!("DURATION: {}", (end - start).num_milliseconds());
+
+        // let result = codegen.execute_main().unwrap();
+        // assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_executable_generation() {
+        // Example AST:
+        // primitive print = builtin_print
+        // print("Hello, Executable!")
+        use super::CodeGenerator;
+        use crate::ast::{ASTNode, Literal};
+        use inkwell::context::Context;
+
+        let context = Context::create();
+        let mut codegen = CodeGenerator::new(&context, "exec_module").unwrap();
+
+        let ast = vec![
+            ASTNode::PrimitiveDeclaration {
+                name: "print".to_string(),
+                builtin: "builtin_print".to_string(),
+            },
+            ASTNode::Call {
+                name: "print".to_string(),
+                args: vec![ASTNode::Literal(Literal::String(
+                    "Hello, Executable!".to_string(),
+                ))],
+            },
+        ];
+
+        codegen.generate_from_ast(ast).unwrap();
+        codegen.print_ir();
+
+        // Compile to executable
+        codegen.compile_to_executable("output_executable").unwrap();
+
+        // Optionally, you can run the generated executable and check its output
+        let output = std::process::Command::new("./output_executable")
+            .output()
+            .expect("Failed to execute generated executable");
+
+        assert!(output.status.success());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("Hello, Executable!"));
     }
 }
 
